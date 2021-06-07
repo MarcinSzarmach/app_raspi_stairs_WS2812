@@ -1,0 +1,30 @@
+
+// for (let index = 0; index < channels[1].array.length; index++) {
+//     channels[1].array[index] = 0x000000;
+// for (let index = 0; index < channels[1].array.length; index++) {
+//     channels[1].array[index] = 0xff0000;
+// }
+// for (let index = 0; index < channels[0].array.length; index++) {
+//     channels[0].array[index] = 0xff0000;
+// }
+// // render
+// ws2821x.render();
+// }
+// for (let index = 0; index < channels[1].array.length; index++) {
+//     channels[1].array[index] = 0x000000;
+// }
+// for (let index = 0; index < channels[0].array.length; index++) {
+//     channels[0].array[index] = 0x000000;
+// }
+// // render
+// ws2821x.render();
+
+
+// for (let index = 0; index < channels[1].array.length; index++) {
+//     channels[1].array[index] = 0xffffff;
+// }
+// for (let index = 0; index < channels[0].array.length; index++) {
+//     channels[0].array[index] = 0xffffff;
+// }
+// // render
+// ws2821x.render();
