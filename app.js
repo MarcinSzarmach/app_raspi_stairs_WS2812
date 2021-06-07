@@ -11,8 +11,6 @@ console.log = function (d) { //
     log_stdout.write(util.format(d) + '\n');
 };
 
-const urlToLightUpOnStairs = "https://svr30.supla.org/direct/1126/o3ZxXdE_DiLnf2t2/turn-on"
-const urlToLightDownOnStairs = "https://svr30.supla.org/direct/1126/o3ZxXdE_DiLnf2t2/turn-off"
 const { getDayTime, parseTime, delay, colorToHex, getTimeAndDate } = require('./common')
 const { steps } = require('./consts')
 const channels = ws2821x.init({
