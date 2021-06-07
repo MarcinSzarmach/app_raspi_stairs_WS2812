@@ -1,5 +1,4 @@
 const ws2821x = require('@gbkwiatt/node-rpi-ws281x-native');
-const axios = require('axios');
 var Gpio = require('onoff').Gpio; //include onoff to interact with the GPIO
 var fs = require('fs');
 var util = require('util');
@@ -133,9 +132,6 @@ class App {
 
     async personEnterDown() {
         if (this.isSunset) {
-            if (this.lightUpLampAtStairs) {
-                await axios.get(urlToLightUpOnStairs)
-            }
             await this.startLightingUp()
         } else {
             console.log(`Person detected on stair, but its day so light still off`)
@@ -147,9 +143,6 @@ class App {
             if (this.isLighting) {
                 this.isLighting = false
                 await this.lightEndUp()
-                if (this.lightUpLampAtStairs) {
-                    await axios.get(urlToLightDownOnStairs)
-                }
                 this.initLightEndingStepsOnlyForSunset()
             }
         }, this.timeToDimmer);
