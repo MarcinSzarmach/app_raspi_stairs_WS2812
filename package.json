@@ -6,6 +6,8 @@
   "dependencies": {
     "@gbkwiatt/node-rpi-ws281x-native": "^1.0.1",
     "axios": "^0.21.1",
-    "onoff": "^6.0.3"
+    "express": "^4.17.1",
+    "onoff": "^6.0.3",
+    "vue": "^2.6.14"
   }
 }

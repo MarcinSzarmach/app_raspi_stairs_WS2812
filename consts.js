@@ -56,7 +56,7 @@ module.exports = {
             channel: 0
         },
         {
-            leds: 33,
+            leds: 32,
             starts: 32,
             channel: 0
         },

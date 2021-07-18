@@ -1,8 +1,7 @@
 const axios = require('axios');
-const XmasRed = 0xff0000;
-const XmasGreen = 0x00ff00;
-const XmasBlue = 0x0000ff;
-const XmasWhite = 0xffffff;
+const XmasRed = "0xff0000";
+const XmasGreen = "0x00ff00";
+const XmasBlue = "0x0000ff";
 const defaultSunrise = { sunrise: "4:00:00 AM", sunset: "7:00:00 PM" }
 module.exports = {
     delay: ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -30,13 +29,13 @@ module.exports = {
         }
         return hex;
     },
-    getRandomInt: (min, max) => {
+    getRandomInt: function (min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     },
-    rgb2Int: (r, g, b) => {
+    rgb2Int: function (r, g, b) {
         return ((r & 0xff) << 16) + ((g & 0xff) << 8) + (b & 0xff);
     },
-    colorWheel: (pos) => {
+    colorWheel: function (pos) {
         pos = 255 - pos;
         if (pos < 85) {
             return this.rgb2Int(255 - pos * 3, 0, pos * 3);
@@ -48,8 +47,7 @@ module.exports = {
             return this.rgb2Int(pos * 3, 255 - pos * 3, 0);
         }
     },
-    RandomXmasColor: () => {
-        var xmasLight = this.getRandomInt(1, 4);
+    randomXmasColor: function (xmasLight) {
         var xmasColor = XmasRed;
         switch (xmasLight) {
             case 1:
@@ -60,9 +58,6 @@ module.exports = {
                 break;
             case 3:
                 xmasColor = XmasBlue;
-                break;
-            case 4:
-                xmasColor = XmasWhite;
                 break;
         }
         return xmasColor;

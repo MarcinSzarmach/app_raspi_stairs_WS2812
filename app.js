@@ -2,6 +2,8 @@ const ws2821x = require('@gbkwiatt/node-rpi-ws281x-native');
 var Gpio = require('onoff').Gpio; //include onoff to interact with the GPIO
 var fs = require('fs');
 var util = require('util');
+const { node } = require('./node')
+
 var log_file = fs.createWriteStream(__dirname + '/debug.log', { flags: 'a' });
 var log_stdout = process.stdout;
 
@@ -10,7 +12,8 @@ console.log = function (d) { //
     log_stdout.write(util.format(d) + '\n');
 };
 
-const { getDayTime, parseTime, delay, colorToHex, getTimeAndDate } = require('./common')
+const { getDayTime, parseTime, delay, colorToHex, getTimeAndDate, colorWheel, randomXmasColor } = require('./common')
+const common = require('./common')
 const { steps } = require('./consts')
 const channels = ws2821x.init({
     dma: 10,
@@ -26,6 +29,8 @@ class App {
     constructor() {
         this.sensorDown = new Gpio(17, 'in', 'rising');
         this.sensorUp = new Gpio(26, 'in', 'rising');
+        this.isSensorEnabled = true
+        this.forceLightInDaylight = true
         this.directionLighted = ''
         this.isLighting = false
         this.lightUpLampAtStairs = false
@@ -37,22 +42,23 @@ class App {
         this.timeToDimmer = this.timeToDimmerInSec * 1000
         this.timerToDimmer
         this.effect = 'smooth'
+        this.effects = ['smooth', 'arrow', 'rainbow', 'xmas']
         this.isSunset = false
         this.daySunsetAndSunriseUpdated;
         (async () => {
             await this.init();
             console.log(`App initialized at ${getTimeAndDate()}`)
-            await delay(10000)
+            await delay(15000)
+            // delay for raspi to download current time from internet - only when first boot
+            console.log(`App gets timers at ${getTimeAndDate()}`)
             await this.initTimers()
+            this.initSunset()
             this.initLightEndingStepsOnlyForSunset()
         })();
     }
     async init() {
         this.initSensor()
-        await this.initTimers()
-        this.initSunset()
         await this.initFlash()
-        this.initLightEndingStepsOnlyForSunset()
     }
     initSensor() {
         const self = this
@@ -76,6 +82,10 @@ class App {
     initSunset() {
         var milisToSunset = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), this.times.sunset.hour, this.times.sunset.minute, 0, 0) - new Date();
         if (milisToSunset < 0) {
+            this.isSunset = true
+        }
+        var milisToSunset = new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), this.times.sunrise.hour, this.times.sunrise.minute, 0, 0) - new Date();
+        if (milisToSunset > 0) {
             this.isSunset = true
         }
     }
@@ -159,25 +169,35 @@ class App {
     }
 
     async personEnterDown() {
-        if (this.isSunset) {
-            if (this.directionLighted == 'down' && this.isLighting) {
-                await this.lightEndDown()
-            } else if (!this.isLighting) {
-                await this.startLightingUp()
+        if (this.isSensorEnabled) {
+            if (this.isSunset || this.forceLightInDaylight) {
+                if (this.directionLighted == 'down' && this.isLighting) {
+                    await this.lightEndDown()
+                    this.initLightEndingStepsOnlyForSunset()
+                } else if (!this.isLighting) {
+                    await this.startLightingUp()
+                }
+            } else {
+                console.log(`Person detected on stairs, but it is day so LEDs still off`)
             }
         } else {
-            console.log(`Person detected on stairs, but it is day so LEDs still off`)
+            console.log(`Person detected on stairs, but sensor is disabled`)
         }
     }
     async personEnterUp() {
-        if (this.isSunset) {
-            if (this.directionLighted == 'up' && this.isLighting) {
-                await this.lightEndUp()
-            } else if (!this.isLighting) {
-                await this.startLightingDown()
+        if (this.isSensorEnabled) {
+            if (this.isSunset || this.forceLightInDaylight) {
+                if (this.directionLighted == 'up' && this.isLighting) {
+                    await this.lightEndUp()
+                    this.initLightEndingStepsOnlyForSunset()
+                } else if (!this.isLighting) {
+                    await this.startLightingDown()
+                }
+            } else {
+                console.log(`Person detected on stairs, but it is day so LEDs still off`)
             }
         } else {
-            console.log(`Person detected on stairs, but it is day so LEDs still off`)
+            console.log(`Person detected on stairs, but sensor is disabled`)
         }
     }
 
@@ -199,8 +219,8 @@ class App {
         }
         this.directionLighted = 'up'
         this.isLighting = true;
-        await this.lightStartUp()
         this.initEndUpTimer()
+        await this.lightStartUp()
     }
     async lightStartUp() {
         switch (this.effect) {
@@ -208,26 +228,32 @@ class App {
                 await this.lightStartUpEffectSmooth()
                 break;
             case 'arrow':
-                throw Error('Function not found')
+                await this.lightStartUpEffectArrow()
+                break;
+            case 'rainbow':
+                await this.lightStartEffectRainbow()
+                break;
+            case 'xmas':
+                await this.lightStartUpEffectXmas()
                 break;
             default:
                 break;
         }
-        await delay(2000)
     }
     async lightEndUp() {
         console.log(`Starting lightEndUp at ${getTimeAndDate()}`)
+        this.isLighting = false
         switch (this.effect) {
             case 'smooth':
                 await this.lightEndUpEffectSmooth()
                 break;
-            case 'arrow':
-                throw Error('Function not found')
+            case 'xmas':
+                await this.lightEndUpEffectXmas()
                 break;
             default:
+                await this.lightEndUpEffectXmas()
                 break;
         }
-        this.isLighting = false
     }
     async lightStartUpEffectSmooth() {
         let dimmerLight = this.dimmerLight
@@ -252,6 +278,64 @@ class App {
             ws2821x.render();
         }
     }
+    async lightEndUpEffectXmas() {
+        let step = 0;
+        let willWork = true;
+        while (willWork) {
+            await delay(this.dimmerDelay * this.dimmerRange)
+            if (step === steps.length - 1) {
+                return
+            }
+            this.lightStep(step, '0x000000')
+            step++
+            ws2821x.render();
+        }
+    }
+    async lightStartUpEffectXmas() {
+        let step = 0;
+        let willWork = true;
+        let xmasOffset = common.getRandomInt(1, 3);
+        while (willWork) {
+            await delay(this.dimmerDelay * this.dimmerRange)
+            if (step === steps.length - 1) {
+                return
+            }
+            xmasOffset++
+            if (xmasOffset === 4) xmasOffset = 1
+            this.lightStep(step, common.randomXmasColor(xmasOffset))
+            step++
+            ws2821x.render();
+        }
+    }
+    async lightStartUpEffectArrow() {
+        let step = 0;
+        let willWork = true;
+        let xmasOffset = common.getRandomInt(1, 3);
+        while (willWork) {
+            await delay(this.dimmerDelay * this.dimmerRange)
+            if (step === steps.length - 1) {
+                return
+            }
+            xmasOffset++
+            if (xmasOffset === 4) xmasOffset = 1
+            this.lightStep(step, common.randomXmasColor(xmasOffset))
+            step++
+            ws2821x.render();
+        }
+    }
+    async lightStartEffectRainbow() {
+        console.log(`Starting lightStartEffectRainbow`)
+        let RainbowOffset = 0;
+        while (this.isLighting) {
+            for (let index = 0; index < steps.length; index++) {
+                this.lightStep(index, common.colorWheel((RainbowOffset + (index * 14)) % 256))
+            }
+            RainbowOffset = (RainbowOffset + 17) % 256;
+            ws2821x.render();
+            await delay(50)
+        }
+    }
+    // endUp
     async lightEndUpEffectSmooth() {
         let dimmerLight = this.dimmerLight
         let dimmerRange = this.dimmerRange
@@ -275,17 +359,6 @@ class App {
             }
         }
     }
-    async lightStartUpEffectRainbow() {
-        console.log(`Starting lightStartUpEffectRainbow`)
-        for (let index = 0; index < channels[1].array.length; index++) {
-            channels[1].array[index] = common.colorWheel((RainbowOffset + i) % 256);
-        }
-        for (let index = 0; index < channels[0].array.length; index++) {
-            channels[0].array[index] = common.colorWheel((RainbowOffset + i) % 256);;
-        }
-        RainbowOffset = (RainbowOffset + 1) % 256;
-        ws2821x.render();
-    }
 
 
     initEndDownTimer() {
@@ -293,8 +366,8 @@ class App {
             if (this.isLighting) {
                 this.isLighting = false
                 await this.lightEndDown()
-                this.initLightEndingStepsOnlyForSunset()
             }
+            this.initLightEndingStepsOnlyForSunset()
         }, this.timeToDimmer);
     }
     async startLightingDown() {
@@ -306,16 +379,19 @@ class App {
         }
         this.directionLighted = 'down'
         this.isLighting = true;
-        await this.lightStartDown()
         this.initEndDownTimer()
+        await this.lightStartDown()
     }
     async lightStartDown() {
         switch (this.effect) {
             case 'smooth':
                 await this.lightStartDownEffectSmooth()
                 break;
-            case 'arrow':
-                throw Error('Function not found')
+            case 'rainbow':
+                await this.lightStartEffectRainbow()
+                break;
+            case 'xmas':
+                await this.lightStartDownEffectXmas()
                 break;
             default:
                 break;
@@ -323,17 +399,18 @@ class App {
     }
     async lightEndDown() {
         console.log(`Starting lightEndDown at ${getTimeAndDate()}`)
+        this.isLighting = false
         switch (this.effect) {
             case 'smooth':
                 await this.lightEndDownEffectSmooth()
                 break;
-            case 'arrow':
-                throw Error('Function not found')
+            case 'xmas':
+                await this.lightEndDownEffectXmas()
                 break;
             default:
+                await this.lightEndDownEffectXmas()
                 break;
         }
-        this.isLighting = false
     }
     async lightStartDownEffectSmooth() {
         let dimmerLight = this.dimmerLight
@@ -355,6 +432,37 @@ class App {
                 return
             }
             this.lightStep(step, `0x${colorToHex(dimmer)}${colorToHex(dimmer)}${colorToHex(dimmer)}`)
+            ws2821x.render();
+        }
+    }
+    async lightStartDownEffectXmas() {
+        let step = steps.length;
+        let willWork = true;
+        let xmasOffset = common.getRandomInt(1, 3);
+        while (willWork) {
+            await delay(this.dimmerDelay * this.dimmerRange)
+            if (step === 0) {
+                willWork == false
+                return
+            }
+            step--;
+            xmasOffset++
+            if (xmasOffset === 4) xmasOffset = 1
+            this.lightStep(step, common.randomXmasColor(xmasOffset))
+            ws2821x.render();
+        }
+    }
+    async lightEndDownEffectXmas() {
+        let step = steps.length;
+        let willWork = true;
+        while (willWork) {
+            await delay(this.dimmerDelay * this.dimmerRange)
+            this.lightStep(step, `0x000000`)
+            if (step === 0) {
+                willWork == false
+                return
+            }
+            step--;
             ws2821x.render();
         }
     }
@@ -412,9 +520,15 @@ class App {
             channels[data.channel].array[index] = color;
         }
     }
+    lightStepPixel(stepNumber, pixel, color = 0x3a3a3a) {
+        const data = steps[stepNumber];
+        channels[data.channel].array[data.starts + pixel] = color;
+    }
 }
 
 let app = new App()
+
+node(app)
 
 process.on('SIGINT', _ => {
     app.sensorDown.unexport();
